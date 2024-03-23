@@ -1,0 +1,12 @@
+[package]
+name = "esgrep"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+regex = "1.10.3"
+clap = "3.0.0-beta.5"
+termcolor = "1.4.1"
+colored = "2.1.0"
