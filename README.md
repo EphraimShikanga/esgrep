@@ -62,6 +62,10 @@ esgrep -s info file.txt
 esgrep -s debug -c red file.txt
 ```
 
+6. Find lines containing email addresses within a text file, highlighting matches:
+```
+esgrep -s -c yellow "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}" file.txt
+```
 
 ## Notes
 - If no file is specified for the input, esgrep reads from standard input (STDIN).
