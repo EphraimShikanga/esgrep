@@ -1,9 +1,30 @@
 use clap::{App, Arg};
 use regex::Regex;
 use std::fs::File;
-use std::io::{prelude::*, BufReader};
+use std::io::{self, prelude::*, BufReader};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use colored::Colorize;
+
+fn split_on_word(line: &str, word: &str) -> Option<(String, String, String)> {
+    let pattern = format!(r"(?i)\b{}\b", regex::escape(word));
+    let regex = Regex::new(&pattern).unwrap();
+
+    if let Some(index) = line.split_whitespace().position(|w| regex.is_match(w)) {
+        let first_part = line
+            .split_whitespace()
+            .take(index)
+            .collect::<Vec<&str>>()
+            .join(" ");
+        let second_part = line.split_whitespace().nth(index).unwrap().to_string();
+        let third_part = line
+            .split_whitespace()
+            .skip(index + 1)
+            .collect::<Vec<&str>>()
+            .join(" ");
+        Some((first_part, second_part, third_part))
+    } else {
+        None
+    }
+}
 
 fn main() -> Result<(), std::io::Error> {
     let cli_matches = App::new("A regex clone written in Rust")
@@ -20,25 +41,32 @@ fn main() -> Result<(), std::io::Error> {
                 .help("Returns the whole file with matches highlighted"),
         )
         .arg(Arg::new("pattern").required(true).help("Pattern to match"))
-        .arg(Arg::new("file").required(true).help("File to search in"))
+        .arg(Arg::new("file").help("File to search in"))
         .get_matches();
 
     let whole_match = cli_matches.is_present("whole-file");
     let first_match = cli_matches.is_present("first_match_only");
     let pattern = cli_matches.value_of("pattern").unwrap();
-    let file = match File::open(cli_matches.value_of("file").unwrap()) {
-        Err(why) => {
-            eprintln!("Error opening file {}", why);
-            std::process::exit(1)
-        }
-        Ok(file) => file,
-    };
-    let reader = BufReader::new(file);
+    let reader: BufReader<Box<dyn Read>>;
+    let mut stdout = StandardStream::stdout(ColorChoice::Auto);
+    
+    if let Some(file) = cli_matches.value_of("file") {
+        // let file = match File::open(cli_matches.value_of("file").unwrap()) {
+        //     Err(why) => {
+        //         eprintln!("Error opening file {}", why);
+        //         std::process::exit(1)
+        //     }
+        //     Ok(file) => file,
+        // };
+        reader = BufReader::new(Box::new(File::open(file).expect("Error")));
+    } else {
+        reader = BufReader::new(Box::new(io::stdin()));
+    }
+
 
     if whole_match {
-        let regex_string = format!(r"\b{}\b", pattern);
+        let regex_string = format!(r"(?i)\b{}\b", pattern);
         let re = Regex::new(&regex_string).unwrap();
-        let stdout = StandardStream::stdout(ColorChoice::Auto);
 
         let mut stdout_handle = stdout.lock();
         let mut color_spec = ColorSpec::new();
@@ -67,30 +95,31 @@ fn main() -> Result<(), std::io::Error> {
             stdout_handle.flush()?;
         }
     } else {
-        let regex_string = format!(r"(?i)(\b{}\b)", pattern);
-        let re = Regex::new(&regex_string).unwrap();
-        let mut stdout = StandardStream::stdout(ColorChoice::Auto);
         let mut n = 1;
-
+        let regex_string = format!(r"(?i)(.*)\b{}\b.*$", pattern);
+        // let regex_strings = format!(r"\b{}\b", regex::escape(pattern));
+        let re = Regex::new(&regex_string).unwrap();
+        // let rex = Regex::new(&regex_strings).unwrap();
+        // let mut stdout = StandardStream::stdout(ColorChoice::Auto);
         for line in reader.lines() {
             let line = line?;
-            if let Some(matched) = re.find(&line) {
-                let mut colored_line = line.clone();
-                let matched_word = &line[matched.start()..matched.end()];
+            if re.is_match(&line) {
+                // let words = line.split(' ').collect::<Vec<&str>>();
+                if let Some((first_part, second_part, third_part)) = split_on_word(&line, pattern) {
+                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+                    write!(&mut stdout, "Match {}: ", &n)?;
+                    stdout.reset()?;
 
-                // Replace the matched word with the same word in green
-                colored_line.replace_range(
-                    matched.start()..matched.end(),
-                    &format!("{}", matched_word.green()),
-                );
-                
-                // Print the line with the matched word in green
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                write!(&mut stdout, "Match {}:", n)?;
-                stdout.reset()?;
-                writeln!(&mut stdout, " {}", colored_line)?;
+                    write!(&mut stdout, "{} ", first_part)?;
+                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
+                    write!(&mut stdout, "{} ", second_part)?;
+                    stdout.reset()?;
+                    writeln!(&mut stdout, "{}", third_part)?;
+                    println!();
+                } else {
+                    writeln!(&mut stdout, "{} ", line)?;
+                }
 
-                println!();
                 if first_match {
                     break;
                 }
